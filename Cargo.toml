@@ -1,0 +1,11 @@
+[package]
+name = "structbuf"
+version = "0.1.0"
+authors = ["Maxim Khitrov <max@mxcrypt.com>"]
+edition = "2021"
+rust-version = "1.56"
+description = "Capacity-limited buffer for structured data"
+license = "MPL-2.0"
+
+[dependencies]
+smallvec = { version = "1.10.0", features = ["const_generics", "const_new", "union"] }
