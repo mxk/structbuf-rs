@@ -308,6 +308,9 @@ impl DerefMut for StructBuf {
 /// written, which is incremented after each write. Write operations panic if
 /// the buffer capacity limit is exceeded.
 ///
+/// The packer intentionally does not expose the underlying [`StructBuf`] to
+/// guarantee append-only operation.
+///
 /// Little-endian encoding is assumed.
 #[derive(Debug)]
 pub struct Packer<'a> {
