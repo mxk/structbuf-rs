@@ -19,7 +19,6 @@
 //!
 //! ```
 //! # use structbuf::{Pack, StructBuf, Unpack};
-//!
 //! let mut b = StructBuf::new(4);
 //! b.append().u8(1).u16(2_u16).u8(3);
 //! // b.u8(4); Would panic
@@ -232,7 +231,6 @@ impl StructBuf {
     ///
     /// ```
     /// # use structbuf::StructBuf;
-    ///
     /// let mut b = StructBuf::new(4);
     /// b.put_at(1, &[1]);
     /// assert_eq!(b.as_ref(), &[0, 1]);
