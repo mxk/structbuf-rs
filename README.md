@@ -23,7 +23,7 @@ cargo add structbuf
 use structbuf::StructBuf;
 
 let mut b = StructBuf::new(4);
-b.pack().u8(1).u16(2_u16).u8(3);
+b.append().u8(1).u16(2_u16).u8(3);
 // b.u8(4); Would panic
 
 let mut p = b.unpack();

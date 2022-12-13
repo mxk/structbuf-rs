@@ -65,10 +65,13 @@
 #![warn(clippy::unseparated_literal_suffix)]
 
 use core::ops::{Deref, DerefMut};
-use core::{mem, slice};
+use core::{mem, ptr, slice};
 
 use smallvec::SmallVec;
 
+/// Inline capacity selected to keep [`StructBuf`] within one cache line in most
+/// use cases. On x64, this adds two additional machine words over the minimum
+/// [`StructBuf`] size.
 const INLINE_CAP: usize = 32;
 
 /// Trait for getting a packer for a byte buffer.
@@ -83,7 +86,7 @@ pub trait Pack {
     fn at(&mut self, i: usize) -> Packer;
 }
 
-/// Trait for getting an unpacker for a byte buffer.
+/// Trait for getting an unpacker for a byte slice.
 pub trait Unpack {
     /// Returns an unpacker for reading values from the start of the buffer.
     fn unpack(&self) -> Unpacker;
@@ -100,7 +103,7 @@ impl<T: AsRef<[u8]>> Unpack for T {
 /// A capacity-limited buffer for encoding and decoding structured data.
 ///
 /// The buffer starts out with a small internal capacity that does not require
-/// allocation. Once the internal capacity is exceeded, it performs at most one
+/// allocation. Once the internal capacity is exhausted, it performs at most one
 /// heap allocation up to the capacity limit. The relationship
 /// `len() <= capacity() <= lim()` always holds.
 ///
@@ -180,8 +183,8 @@ impl StructBuf {
         self.remaining() == 0
     }
 
-    /// Removes all but the first `n` bytes from the buffer. Capacity is
-    /// unaffected, and it has no effect if `self.len() <= n`.
+    /// Removes all but the first `n` bytes from the buffer without affecting
+    /// capacity. It has no effect if `self.len() <= n`.
     #[inline]
     pub fn truncate(&mut self, n: usize) -> &mut Self {
         if n < self.b.len() {
@@ -214,15 +217,16 @@ impl StructBuf {
     #[inline]
     #[must_use]
     pub const fn can_put_at(&self, i: usize, n: usize) -> bool {
-        i + n <= self.lim
+        let (sum, overflow) = i.overflowing_add(n);
+        sum <= self.lim && !overflow
     }
 
     /// Writes slice `v` at index `i`. Any existing data at `i` is overwritten.
-    /// If `len() < i`, then the buffer is padded with `i - len()` zeros.
+    /// If `len() < i`, the buffer is padded with `i - len()` zeros.
     ///
     /// # Panics
     ///
-    /// Panics if `lim() < n`.
+    /// Panics if `lim() < i + v.len()`.
     ///
     /// # Examples
     ///
@@ -252,7 +256,7 @@ impl StructBuf {
         // SAFETY: `&mut self` prevents v from referencing the buffer
         unsafe { dst.add(i).copy_from_nonoverlapping(v.as_ptr(), v.len()) };
         if n > self.b.len() {
-            // SAFETY: self.v contains n initialized bytes
+            // SAFETY: self.b contains n initialized bytes
             unsafe { self.b.set_len(n) };
         }
     }
@@ -287,14 +291,14 @@ impl AsMut<[u8]> for StructBuf {
 impl Deref for StructBuf {
     type Target = [u8];
 
-    #[inline]
+    #[inline(always)]
     fn deref(&self) -> &Self::Target {
         &self.b
     }
 }
 
 impl DerefMut for StructBuf {
-    #[inline]
+    #[inline(always)]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.b
     }
@@ -310,35 +314,22 @@ impl DerefMut for StructBuf {
 #[derive(Debug)]
 pub struct Packer<'a> {
     i: usize,
-    b: &'a mut StructBuf,
+    b: &'a mut StructBuf, // TODO: Make generic?
 }
 
-// TODO: Remove the ability to get StructBuf through Packer?
-
-impl<'a> Packer<'a> {
-    /// Returns the original buffer reference.
-    #[inline(always)]
-    pub fn into_inner(self) -> &'a mut StructBuf {
-        self.b
-    }
-
-    /// Returns a reference to the buffer.
-    #[inline(always)]
-    pub const fn buf(&self) -> &StructBuf {
-        self.b
-    }
-
-    /// Returns a mutable reference to the buffer.
-    #[inline(always)]
-    pub fn buf_mut(&mut self) -> &mut StructBuf {
-        self.b
-    }
-
+impl Packer<'_> {
     /// Returns the current index.
     #[inline(always)]
     #[must_use]
-    pub const fn index(&self) -> usize {
+    pub const fn position(&self) -> usize {
         self.i
+    }
+
+    /// Returns the number of additional bytes that can be written.
+    #[inline]
+    #[must_use]
+    pub fn remaining(&self) -> usize {
+        self.b.lim.saturating_sub(self.i)
     }
 
     /// Advances the current index by `n` bytes.
@@ -427,11 +418,10 @@ impl<'a> Packer<'a> {
         self.put(v.into().to_le_bytes())
     }
 
-    /// Returns whether `n` bytes can be written to the buffer at the current
-    /// index.
+    /// Returns whether `n` bytes can be written at the current index.
     #[inline]
     #[must_use]
-    pub fn can_put(&self, n: usize) -> bool {
+    pub const fn can_put(&self, n: usize) -> bool {
         self.b.can_put_at(self.i, n)
     }
 
@@ -453,7 +443,7 @@ impl<'a> Packer<'a> {
 ///
 /// Little-endian encoding is assumed.
 #[allow(single_use_lifetimes)]
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[must_use]
 #[repr(transparent)]
 pub struct Unpacker<'a>(&'a [u8]);
@@ -492,7 +482,7 @@ impl<'a> Unpacker<'a> {
     #[inline]
     #[must_use]
     pub fn is_ok(&self) -> bool {
-        self.0.as_ptr() != Self::err().as_ptr()
+        !ptr::eq(self.0, Self::err())
     }
 
     /// Returns the remaining byte slice in a new unpacker, leaving `self`
@@ -531,9 +521,9 @@ impl<'a> Unpacker<'a> {
     }
 
     /// Splits the remaining byte slice at `i`, and returns two new unpackers,
-    /// which will be in error state if `len() < i`.
+    /// both of which will be in an error state if `len() < i`.
     #[inline]
-    pub fn split_at(&self, i: usize) -> (Self, Self) {
+    pub const fn split_at(&self, i: usize) -> (Self, Self) {
         let Some(rem) = self.0.len().checked_sub(i) else {
             return (Self(Self::err()), Self(Self::err()));
         };
@@ -548,7 +538,7 @@ impl<'a> Unpacker<'a> {
     }
 
     /// Advances `self` by `n` bytes, returning a new unpacker for the skipped
-    /// bytes or `None` if there is an insufficient number of bytes remaining,
+    /// bytes or [`None`] if there is an insufficient number of bytes remaining,
     /// in which case any remaining bytes are discarded.
     ///
     /// # Examples
@@ -669,15 +659,15 @@ impl<'a> Unpacker<'a> {
     #[inline]
     #[must_use]
     pub unsafe fn read<T: Default>(&mut self) -> T {
-        let n = mem::size_of::<T>();
-        if n > self.0.len() {
+        if let Some(rem) = self.0.len().checked_sub(mem::size_of::<T>()) {
+            // SAFETY: 0 <= size_of::<T>() <= len()
+            let p = self.0.as_ptr().cast::<T>();
+            self.0 = slice::from_raw_parts(p.add(1).cast(), rem);
+            p.read_unaligned()
+        } else {
             self.0 = Self::err();
-            return T::default();
+            T::default()
         }
-        // SAFETY: 0 <= size_of::<T>() <= len()
-        let p = self.0.as_ptr().cast::<T>();
-        self.0 = slice::from_raw_parts(p.add(1).cast(), self.0.len() - n);
-        p.read_unaligned()
     }
 
     /// Returns a sentinel byte slice indicating that the original slice was too
@@ -730,7 +720,9 @@ mod tests {
     #[test]
     fn packer_overwrite() {
         let mut b = StructBuf::new(4);
-        b.append().put([1, 2, 3, 4]).buf_mut().at(1).u16(0x0203_u16);
+        b.append().put([1, 2, 3, 4]);
+        assert_eq!(b.as_ref(), &[1, 2, 3, 4]);
+        b.at(1).u16(0x0203_u16);
         assert_eq!(b.as_ref(), &[1, 3, 2, 4]);
     }
 
