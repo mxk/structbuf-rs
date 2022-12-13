@@ -1,11 +1,14 @@
 [package]
 name = "structbuf"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Maxim Khitrov <max@mxcrypt.com>"]
 edition = "2021"
 rust-version = "1.56"
-description = "Capacity-limited buffer for structured data"
+description = "Capacity-limited structured data buffer"
+repository = "https://github.com/mxk/structbuf-rs"
 license = "MPL-2.0"
+keywords = ["buffers", "data-structure", "no-std", "parser", "vec"]
+categories = ["data-structures", "encoding", "memory-management", "no-std", "parsing"]
 
 [dependencies]
 smallvec = { version = "1.10.0", features = ["const_generics", "const_new", "union"] }
