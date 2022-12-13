@@ -128,6 +128,13 @@ impl StructBuf {
         }
     }
 
+    /// Creates an empty buffer that can never be written to. This is the same
+    /// as [`StructBuf::default()`], but usable in `const` context.
+    #[inline]
+    pub const fn none() -> Self {
+        Self::new(0)
+    }
+
     /// Creates a pre-allocated capacity-limited buffer. This buffer will never
     /// reallocate and should be used for receiving messages up to the capacity
     /// limit.
@@ -182,6 +189,13 @@ impl StructBuf {
         self.remaining() == 0
     }
 
+    /// Returns whether the buffer has a limit of 0 and can never be written to.
+    #[inline]
+    #[must_use]
+    pub const fn is_none(&self) -> bool {
+        self.lim == 0
+    }
+
     /// Removes all but the first `n` bytes from the buffer without affecting
     /// capacity. It has no effect if `self.len() <= n`.
     #[inline]
@@ -197,6 +211,12 @@ impl StructBuf {
     #[inline]
     pub fn clear(&mut self) -> &mut Self {
         self.truncate(0)
+    }
+
+    /// Returns the buffer, leaving `self` empty and unwritable.
+    #[inline]
+    pub fn take(&mut self) -> Self {
+        mem::replace(self, Self::none())
     }
 
     /// Sets the buffer length.
@@ -241,8 +261,8 @@ impl StructBuf {
     pub fn put_at(&mut self, i: usize, v: &[u8]) {
         let n = i.checked_add(v.len()).expect("usize overflow");
         assert!(n <= self.lim, "buffer limit exceeded");
-        if !self.b.spilled() && self.b.inline_size() < n {
-            self.b.grow(self.lim);
+        if self.b.capacity() < n {
+            self.b.grow(self.lim); // TODO: Limit growth for a large lim?
         }
         let pad = i.saturating_sub(self.b.len());
         let dst = self.b.as_mut_ptr();
@@ -433,6 +453,23 @@ impl Packer<'_> {
         self.b.put_at(self.i, v);
         self.i += v.len();
         self
+    }
+}
+
+impl AsRef<[u8]> for Packer<'_> {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        // SAFETY: Index is guranteed to be valid
+        unsafe { self.b.get_unchecked(self.b.len().min(self.i)..) }
+    }
+}
+
+impl AsMut<[u8]> for Packer<'_> {
+    #[inline]
+    fn as_mut(&mut self) -> &mut [u8] {
+        let i = self.b.len().min(self.i);
+        // SAFETY: Index is guranteed to be valid
+        unsafe { self.b.get_unchecked_mut(i..) }
     }
 }
 
