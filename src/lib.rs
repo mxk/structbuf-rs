@@ -252,30 +252,53 @@ impl StructBuf {
     /// ```
     /// # use structbuf::StructBuf;
     /// let mut b = StructBuf::new(4);
-    /// b.put_at(1, &[1]);
+    /// b.put_at(1, [1]);
     /// assert_eq!(b.as_ref(), &[0, 1]);
     ///
-    /// b.put_at(4, &[]);
+    /// b.put_at(4, []);
     /// assert_eq!(b.as_ref(), &[0, 1, 0, 0]);
     /// ```
-    pub fn put_at(&mut self, i: usize, v: &[u8]) {
-        let n = i.checked_add(v.len()).expect("usize overflow");
-        assert!(n <= self.lim, "buffer limit exceeded");
-        if self.b.capacity() < n {
+    #[inline]
+    pub fn put_at<T: AsRef<[u8]>>(&mut self, i: usize, v: T) {
+        assert!(self.try_put_at(i, v), "buffer limit exceeded");
+    }
+
+    /// Writes slice `v` at index `i` if `i + v.len() <= lim()`. Any existing
+    /// data at `i` is overwritten. If `len() < i`, the buffer is padded with
+    /// `i - len()` zeros. Returns whether `v` was written.
+    #[inline]
+    pub fn try_put_at<T: AsRef<[u8]>>(&mut self, i: usize, v: T) -> bool {
+        let v = v.as_ref();
+        let (j, overflow) = i.overflowing_add(v.len());
+        let ok = !overflow && j <= self.lim;
+        if ok {
+            // SAFETY: i + v.len() == j <= self.lim
+            unsafe { self.put_at_unchecked(i, j, v) };
+        }
+        ok
+    }
+
+    /// Writes slice `v` at index `i`.
+    ///
+    /// # Safety
+    ///
+    /// Caller must ensure that `i + v.len() == j <= self.lim`.
+    unsafe fn put_at_unchecked(&mut self, i: usize, j: usize, v: &[u8]) {
+        if self.b.capacity() < j {
             self.b.grow(self.lim); // TODO: Limit growth for a large lim?
         }
         let pad = i.saturating_sub(self.b.len());
         let dst = self.b.as_mut_ptr();
         if pad > 0 {
-            // SAFETY: `len() + pad == i <= n` and dst is valid for at least n
+            // SAFETY: `len() + pad == i <= j` and dst is valid for at least j
             // bytes.
             unsafe { dst.add(self.b.len()).write_bytes(0, pad) };
         }
         // SAFETY: `&mut self` prevents v from referencing the buffer
         unsafe { dst.add(i).copy_from_nonoverlapping(v.as_ptr(), v.len()) };
-        if n > self.b.len() {
-            // SAFETY: self.b contains n initialized bytes
-            unsafe { self.b.set_len(n) };
+        if j > self.b.len() {
+            // SAFETY: self.b contains j initialized bytes
+            unsafe { self.b.set_len(j) };
         }
     }
 }
@@ -459,7 +482,7 @@ impl Packer<'_> {
 impl AsRef<[u8]> for Packer<'_> {
     #[inline]
     fn as_ref(&self) -> &[u8] {
-        // SAFETY: Index is guranteed to be valid
+        // SAFETY: Index is guaranteed to be valid
         unsafe { self.b.get_unchecked(self.b.len().min(self.i)..) }
     }
 }
@@ -468,7 +491,7 @@ impl AsMut<[u8]> for Packer<'_> {
     #[inline]
     fn as_mut(&mut self) -> &mut [u8] {
         let i = self.b.len().min(self.i);
-        // SAFETY: Index is guranteed to be valid
+        // SAFETY: Index is guaranteed to be valid
         unsafe { self.b.get_unchecked_mut(i..) }
     }
 }
@@ -715,7 +738,7 @@ impl<'a> Unpacker<'a> {
     const fn err() -> &'static [u8] {
         // Can't be a const: https://github.com/rust-lang/rust/issues/105536
         // SAFETY: A dangling pointer is valid for a zero-length slice
-        unsafe { slice::from_raw_parts(core::ptr::NonNull::dangling().as_ptr(), 0) }
+        unsafe { slice::from_raw_parts(ptr::NonNull::dangling().as_ptr(), 0) }
     }
 }
 
@@ -774,7 +797,7 @@ mod tests {
         assert_eq!(b[INLINE_CAP], 1);
 
         b.clear();
-        b.put_at(4, &[]);
+        b.put_at(4, []);
         assert_eq!(b.as_ref(), &[0, 0, 0, 0]);
     }
 

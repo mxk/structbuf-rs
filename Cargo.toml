@@ -1,6 +1,6 @@
 [package]
 name = "structbuf"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Maxim Khitrov <max@mxcrypt.com>"]
 edition = "2021"
 rust-version = "1.56"
@@ -11,4 +11,4 @@ keywords = ["buffers", "data-structure", "no-std", "parser", "vec"]
 categories = ["data-structures", "encoding", "memory-management", "no-std", "parsing"]
 
 [dependencies]
-smallvec = { version = "1.10.0", features = ["const_generics", "const_new", "union"] }
+smallvec = { version = "1", features = ["const_generics", "const_new", "union"] }
