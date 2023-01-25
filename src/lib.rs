@@ -516,12 +516,12 @@ impl<'a> Unpacker<'a> {
         Self(b)
     }
 
-    /// Returns the remaining byte slice or `None` if any reads went past the
-    /// end of the original slice.
+    /// Returns the remaining byte slice, if any. The caller should use
+    /// [`Self::is_ok()`] to check whether the returned slice is valid.
     #[inline]
     #[must_use]
-    pub fn into_inner(self) -> Option<&'a [u8]> {
-        self.is_ok().then_some(self.0)
+    pub fn into_inner(self) -> &'a [u8] {
+        self.0
     }
 
     /// Returns the remaining number of bytes.
