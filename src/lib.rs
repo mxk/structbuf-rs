@@ -520,7 +520,7 @@ impl<'a> Unpacker<'a> {
     /// [`Self::is_ok()`] to check whether the returned slice is valid.
     #[inline]
     #[must_use]
-    pub fn into_inner(self) -> &'a [u8] {
+    pub const fn into_inner(self) -> &'a [u8] {
         self.0
     }
 
