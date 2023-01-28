@@ -47,20 +47,41 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::inline_always)]
 // #![warn(clippy::restriction)]
+#![warn(clippy::assertions_on_result_states)]
 #![warn(clippy::clone_on_ref_ptr)]
 #![warn(clippy::dbg_macro)]
+#![warn(clippy::decimal_literal_representation)]
+#![warn(clippy::default_union_representation)]
 #![warn(clippy::deref_by_slicing)]
+#![warn(clippy::empty_drop)]
+#![warn(clippy::empty_structs_with_brackets)]
 #![warn(clippy::exhaustive_enums)]
+#![warn(clippy::exit)]
 #![warn(clippy::fn_to_numeric_cast_any)]
+#![warn(clippy::format_push_string)]
+#![warn(clippy::get_unwrap)]
 #![warn(clippy::if_then_some_else_none)]
+#![warn(clippy::lossy_float_literal)]
+#![warn(clippy::missing_enforced_import_renames)]
+#![warn(clippy::mixed_read_write_in_expression)]
 #![warn(clippy::mod_module_files)]
+#![warn(clippy::mutex_atomic)]
 #![warn(clippy::pattern_type_mismatch)]
 #![warn(clippy::print_stdout)]
+#![warn(clippy::rc_buffer)]
+#![warn(clippy::rc_mutex)]
 #![warn(clippy::rest_pat_in_fully_bound_structs)]
 #![warn(clippy::str_to_string)]
+#![warn(clippy::string_add)]
 #![warn(clippy::string_to_string)]
+#![warn(clippy::suspicious_xor_used_as_pow)]
 #![warn(clippy::todo)]
+#![warn(clippy::try_err)]
 #![warn(clippy::undocumented_unsafe_blocks)]
+#![warn(clippy::unnecessary_safety_comment)]
+#![warn(clippy::unnecessary_safety_doc)]
+#![warn(clippy::unnecessary_self_imports)]
+#![warn(clippy::unneeded_field_pattern)]
 #![warn(clippy::unseparated_literal_suffix)]
 
 use core::ops::{Deref, DerefMut};
@@ -93,7 +114,7 @@ pub trait Unpack {
 
 /// Blanket implementation for all `AsRef<[u8]>` types.
 impl<T: AsRef<[u8]>> Unpack for T {
-    #[inline]
+    #[inline(always)]
     fn unpack(&self) -> Unpacker {
         Unpacker::new(self.as_ref())
     }
@@ -120,7 +141,7 @@ impl StructBuf {
     /// Creates a new capacity-limited buffer without allocating from the heap.
     /// This should be used for creating outbound messages that may not require
     /// the full capacity.
-    #[inline]
+    #[inline(always)]
     pub const fn new(lim: usize) -> Self {
         Self {
             lim,
@@ -130,7 +151,7 @@ impl StructBuf {
 
     /// Creates an empty buffer that can never be written to. This is the same
     /// as [`StructBuf::default()`], but usable in `const` context.
-    #[inline]
+    #[inline(always)]
     pub const fn none() -> Self {
         Self::new(0)
     }
@@ -138,7 +159,7 @@ impl StructBuf {
     /// Creates a pre-allocated capacity-limited buffer. This buffer will never
     /// reallocate and should be used for receiving messages up to the capacity
     /// limit.
-    #[inline]
+    #[inline(always)]
     pub fn with_capacity(cap: usize) -> Self {
         Self {
             lim: cap,
@@ -147,14 +168,14 @@ impl StructBuf {
     }
 
     /// Returns the number of initialized bytes in the buffer (`<= capacity()`).
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn len(&self) -> usize {
         self.b.len()
     }
 
     /// Returns the number of bytes allocated by the buffer (`<= lim()`).
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn capacity(&self) -> usize {
         self.b.capacity().min(self.lim)
@@ -169,28 +190,28 @@ impl StructBuf {
 
     /// Returns the number of additional bytes that can be written to the
     /// buffer.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn remaining(&self) -> usize {
         self.lim - self.b.len()
     }
 
     /// Returns whether the buffer is empty.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.b.is_empty()
     }
 
     /// Returns whether the buffer contains the maximum number of bytes.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn is_full(&self) -> bool {
         self.remaining() == 0
     }
 
     /// Returns whether the buffer has a limit of 0 and can never be written to.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub const fn is_none(&self) -> bool {
         self.lim == 0
@@ -208,13 +229,13 @@ impl StructBuf {
     }
 
     /// Clears the buffer, resetting its length to 0 without affecting capacity.
-    #[inline]
+    #[inline(always)]
     pub fn clear(&mut self) -> &mut Self {
         self.truncate(0)
     }
 
     /// Returns the buffer, leaving `self` empty and unwritable.
-    #[inline]
+    #[inline(always)]
     pub fn take(&mut self) -> Self {
         mem::replace(self, Self::none())
     }
@@ -258,7 +279,7 @@ impl StructBuf {
     /// b.put_at(4, []);
     /// assert_eq!(b.as_ref(), &[0, 1, 0, 0]);
     /// ```
-    #[inline]
+    #[inline(always)]
     pub fn put_at<T: AsRef<[u8]>>(&mut self, i: usize, v: T) {
         assert!(self.try_put_at(i, v), "buffer limit exceeded");
     }
@@ -304,26 +325,26 @@ impl StructBuf {
 }
 
 impl Pack for StructBuf {
-    #[inline]
+    #[inline(always)]
     fn append(&mut self) -> Packer {
         self.at(self.b.len())
     }
 
-    #[inline]
+    #[inline(always)]
     fn at(&mut self, i: usize) -> Packer {
         Packer { i, b: self }
     }
 }
 
 impl AsRef<[u8]> for StructBuf {
-    #[inline]
+    #[inline(always)]
     fn as_ref(&self) -> &[u8] {
         &self.b
     }
 }
 
 impl AsMut<[u8]> for StructBuf {
-    #[inline]
+    #[inline(always)]
     fn as_mut(&mut self) -> &mut [u8] {
         &mut self.b
     }
@@ -377,26 +398,26 @@ impl Packer<'_> {
     }
 
     /// Advances the current index by `n` bytes.
-    #[inline]
+    #[inline(always)]
     pub fn skip(&mut self, n: usize) -> &mut Self {
         self.i += n;
         self
     }
 
     /// Writes a `bool` as a `u8` at the current index.
-    #[inline]
+    #[inline(always)]
     pub fn bool<T: Into<bool>>(&mut self, v: T) -> &mut Self {
         self.u8(v.into())
     }
 
     /// Writes a `u8` at the current index.
-    #[inline]
+    #[inline(always)]
     pub fn u8<T: Into<u8>>(&mut self, v: T) -> &mut Self {
         self.put([v.into()])
     }
 
     /// Writes a `u16` at the current index.
-    #[inline]
+    #[inline(always)]
     pub fn u16<T: Into<u16>>(&mut self, v: T) -> &mut Self {
         self.put(v.into().to_le_bytes())
     }
@@ -406,7 +427,7 @@ impl Packer<'_> {
     /// # Panics
     ///
     /// Panics if `v` cannot be represented in 24 bits.
-    #[inline]
+    #[inline(always)]
     pub fn u24<T: Into<u32>>(&mut self, v: T) -> &mut Self {
         let v = v.into().to_le_bytes();
         assert_eq!(v[3], 0);
@@ -414,56 +435,56 @@ impl Packer<'_> {
     }
 
     /// Writes a `u32` at the current index.
-    #[inline]
+    #[inline(always)]
     pub fn u32<T: Into<u32>>(&mut self, v: T) -> &mut Self {
         self.put(v.into().to_le_bytes())
     }
 
     /// Writes a `u64` at the current index.
-    #[inline]
+    #[inline(always)]
     pub fn u64<T: Into<u64>>(&mut self, v: T) -> &mut Self {
         self.put(v.into().to_le_bytes())
     }
 
     /// Writes a `u128` at the current index.
-    #[inline]
+    #[inline(always)]
     pub fn u128<T: Into<u128>>(&mut self, v: T) -> &mut Self {
         self.put(v.into().to_le_bytes())
     }
 
     /// Writes an `i8` at the current index.
-    #[inline]
+    #[inline(always)]
     pub fn i8<T: Into<i8>>(&mut self, v: T) -> &mut Self {
         #[allow(clippy::cast_sign_loss)]
         self.put([v.into() as u8])
     }
 
     /// Writes an `i16` at the current index.
-    #[inline]
+    #[inline(always)]
     pub fn i16<T: Into<i16>>(&mut self, v: T) -> &mut Self {
         self.put(v.into().to_le_bytes())
     }
 
     /// Writes an `i32` at the current index.
-    #[inline]
+    #[inline(always)]
     pub fn i32<T: Into<i32>>(&mut self, v: T) -> &mut Self {
         self.put(v.into().to_le_bytes())
     }
 
     /// Writes an `i64` at the current index.
-    #[inline]
+    #[inline(always)]
     pub fn i64<T: Into<i64>>(&mut self, v: T) -> &mut Self {
         self.put(v.into().to_le_bytes())
     }
 
     /// Writes an `i128` at the current index.
-    #[inline]
+    #[inline(always)]
     pub fn i128<T: Into<i128>>(&mut self, v: T) -> &mut Self {
         self.put(v.into().to_le_bytes())
     }
 
     /// Returns whether `n` bytes can be written at the current index.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub const fn can_put(&self, n: usize) -> bool {
         self.b.can_put_at(self.i, n)
@@ -496,6 +517,12 @@ impl AsMut<[u8]> for Packer<'_> {
     }
 }
 
+/// Allows terminating packer method calls with `.into()`.
+impl From<&mut Packer<'_>> for () {
+    #[inline(always)]
+    fn from(_: &mut Packer) -> Self {}
+}
+
 /// Unpacker of POD values from a byte slice.
 ///
 /// Any reads past the end of the slice return default values rather than
@@ -511,28 +538,28 @@ pub struct Unpacker<'a>(&'a [u8]);
 
 impl<'a> Unpacker<'a> {
     /// Creates a new unpacker.
-    #[inline]
+    #[inline(always)]
     pub const fn new(b: &'a [u8]) -> Self {
         Self(b)
     }
 
     /// Returns the remaining byte slice, if any. The caller should use
     /// [`Self::is_ok()`] to check whether the returned slice is valid.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub const fn into_inner(self) -> &'a [u8] {
         self.0
     }
 
     /// Returns the remaining number of bytes.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub const fn len(&self) -> usize {
         self.0.len()
     }
 
     /// Returns whether the byte slice is empty.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.0.is_empty()
@@ -540,7 +567,7 @@ impl<'a> Unpacker<'a> {
 
     /// Returns whether all reads were within the bounds of the original byte
     /// slice.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn is_ok(&self) -> bool {
         !ptr::eq(self.0, Self::err())
@@ -568,7 +595,7 @@ impl<'a> Unpacker<'a> {
 
     /// Returns the output of `f`, or `default` if `f` fails to consume the
     /// entire slice without reading past the end.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn map_or<T>(self, default: T, f: impl FnOnce(&mut Self) -> T) -> T {
         self.map(f).unwrap_or(default)
@@ -576,7 +603,7 @@ impl<'a> Unpacker<'a> {
 
     /// Returns the output of `f`, or the output of `default()` if `f` fails to
     /// consume the entire slice without reading past the end.
-    #[inline]
+    #[inline(always)]
     pub fn map_or_else<T>(self, default: impl FnOnce() -> T, f: impl FnOnce(&mut Self) -> T) -> T {
         self.map(f).unwrap_or_else(default)
     }
@@ -624,14 +651,14 @@ impl<'a> Unpacker<'a> {
 
     /// Returns the next `u8` as a `bool` where any non-zero value is converted
     /// to `true`.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn bool(&mut self) -> bool {
         self.u8() != 0
     }
 
     /// Returns the next `u8`.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn u8(&mut self) -> u8 {
         // SAFETY: All bit patterns are valid
@@ -639,7 +666,7 @@ impl<'a> Unpacker<'a> {
     }
 
     /// Returns the next `u16`.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn u16(&mut self) -> u16 {
         // SAFETY: All bit patterns are valid
@@ -647,7 +674,7 @@ impl<'a> Unpacker<'a> {
     }
 
     /// Returns the next `u32`.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn u32(&mut self) -> u32 {
         // SAFETY: All bit patterns are valid
@@ -655,7 +682,7 @@ impl<'a> Unpacker<'a> {
     }
 
     /// Returns the next `u64`.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn u64(&mut self) -> u64 {
         // SAFETY: All bit patterns are valid
@@ -663,7 +690,7 @@ impl<'a> Unpacker<'a> {
     }
 
     /// Returns the next `u128`.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn u128(&mut self) -> u128 {
         // SAFETY: All bit patterns are valid
@@ -671,7 +698,7 @@ impl<'a> Unpacker<'a> {
     }
 
     /// Returns the next `i8`.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn i8(&mut self) -> i8 {
         // SAFETY: All bit patterns are valid
@@ -679,7 +706,7 @@ impl<'a> Unpacker<'a> {
     }
 
     /// Returns the next `i16`.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn i16(&mut self) -> i16 {
         // SAFETY: All bit patterns are valid
@@ -687,7 +714,7 @@ impl<'a> Unpacker<'a> {
     }
 
     /// Returns the next `i32`.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn i32(&mut self) -> i32 {
         // SAFETY: All bit patterns are valid
@@ -695,7 +722,7 @@ impl<'a> Unpacker<'a> {
     }
 
     /// Returns the next `i64`.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn i64(&mut self) -> i64 {
         // SAFETY: All bit patterns are valid
@@ -703,11 +730,28 @@ impl<'a> Unpacker<'a> {
     }
 
     /// Returns the next `i128`.
-    #[inline]
+    #[inline(always)]
     #[must_use]
     pub fn i128(&mut self) -> i128 {
         // SAFETY: All bit patterns are valid
         i128::from_le(unsafe { self.read() })
+    }
+
+    /// Returns the next `[u8; N]` array.
+    #[inline(always)]
+    #[must_use]
+    pub fn bytes<const N: usize>(&mut self) -> [u8; N] {
+        if let Some(rem) = self.0.len().checked_sub(N) {
+            // SAFETY: 0 <= N <= len() and the result has an alignment of 1
+            unsafe {
+                let p = self.0.as_ptr();
+                self.0 = slice::from_raw_parts(p.add(N), rem);
+                *p.cast()
+            }
+        } else {
+            self.0 = Self::err();
+            [0; N]
+        }
     }
 
     /// Returns the next `T`, or `T::default()` if there is an insufficient
@@ -721,7 +765,7 @@ impl<'a> Unpacker<'a> {
     #[must_use]
     pub unsafe fn read<T: Default>(&mut self) -> T {
         if let Some(rem) = self.0.len().checked_sub(mem::size_of::<T>()) {
-            // SAFETY: 0 <= size_of::<T>() <= len()
+            // 0 <= size_of::<T>() <= len()
             let p = self.0.as_ptr().cast::<T>();
             self.0 = slice::from_raw_parts(p.add(1).cast(), rem);
             p.read_unaligned()
@@ -815,6 +859,10 @@ mod tests {
         assert_eq!(p.u16(), 0);
         assert!(!p.is_ok());
         assert_eq!(p.u32(), 0);
+
+        let mut p = Unpacker::new(&[1, 2, 3]);
+        assert_eq!(p.bytes::<2>(), [1, 2]);
+        assert_eq!(p.bytes::<3>(), [0, 0, 0]);
     }
 
     #[test]

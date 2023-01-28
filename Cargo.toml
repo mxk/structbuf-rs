@@ -1,6 +1,6 @@
 [package]
 name = "structbuf"
-version = "0.3.2"
+version = "0.3.3"
 authors = ["Maxim Khitrov <max@mxcrypt.com>"]
 edition = "2021"
 rust-version = "1.56"
