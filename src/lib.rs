@@ -253,6 +253,13 @@ impl StructBuf {
         self
     }
 
+    /// Sets the buffer limit. Any existing data past the limit is truncated.
+    #[inline]
+    pub fn set_lim(&mut self, n: usize) -> &mut Self {
+        self.lim = n;
+        self.truncate(n)
+    }
+
     /// Returns whether `n` bytes can be written to the buffer at index `i`.
     #[inline]
     #[must_use]
@@ -541,6 +548,12 @@ impl<'a> Unpacker<'a> {
     #[inline(always)]
     pub const fn new(b: &'a [u8]) -> Self {
         Self(b)
+    }
+
+    /// Creates an unpacker in an error state.
+    #[inline(always)]
+    pub const fn invalid() -> Self {
+        Self(Self::err())
     }
 
     /// Returns the remaining byte slice, if any. The caller should use
